@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { Upload, Save, Trash2, LogOut, Film, Eye, EyeOff } from "lucide-react"
-import Image from "next/image"
 
 // Define types for our gallery items
 type AspectRatioOption =
@@ -43,6 +42,7 @@ export default function AdminPage() {
   const [uploadingImage, setUploadingImage] = useState(false)
   const [savingChanges, setSavingChanges] = useState(false)
   const [activeTab, setActiveTab] = useState<"cinematography" | "video-editing" | "social-media">("cinematography")
+  const [statusMessage, setStatusMessage] = useState("")
 
   // Aspect ratio options for the dropdown
   const aspectRatioOptions: { value: AspectRatioOption; label: string }[] = [
@@ -69,12 +69,13 @@ export default function AdminPage() {
 
   // Check if user is authenticated on component mount
   useEffect(() => {
-    const checkAuth = async () => {
+    // This runs only on client-side
+    const checkAuth = () => {
       try {
         const token = localStorage.getItem("psaAdminToken")
         if (token) {
           setIsAuthenticated(true)
-          await fetchGalleryItems()
+          loadGalleryItems()
         }
       } catch (error) {
         console.error("Authentication error:", error)
@@ -83,54 +84,70 @@ export default function AdminPage() {
       }
     }
 
-    checkAuth()
+    // Small delay to ensure client-side code runs properly
+    setTimeout(checkAuth, 100)
   }, [])
 
-  // Fetch gallery items
-  const fetchGalleryItems = async () => {
+  // Load gallery items from localStorage
+  const loadGalleryItems = () => {
     try {
-      // Mock data for demo - in production this would fetch from your backend
-      const mockItems: GalleryItem[] = [
-        {
-          id: "1",
-          type: "image",
-          src: "/placeholder.svg?height=600&width=800",
-          alt: "Cinematic portrait with dramatic lighting",
-          layout: { colSpan: "md:col-span-2", rowSpan: "md:row-span-2", aspectRatio: "aspect-[16/10]" },
-        },
-        {
-          id: "2",
-          type: "image",
-          src: "/placeholder.svg?height=400&width=400",
-          alt: "Moody interior cinematography",
-          layout: { colSpan: "md:col-span-1", rowSpan: "md:row-span-1", aspectRatio: "aspect-square" },
-        },
-        {
-          id: "3",
-          type: "video",
-          src: "/placeholder.svg?height=500&width=800",
-          poster: "/placeholder.svg?height=500&width=800",
-          alt: "Cinematography reel 1",
-          layout: { colSpan: "md:col-span-1", rowSpan: "md:row-span-1", aspectRatio: "aspect-video" },
-        },
-      ]
-      setGalleryItems(mockItems)
+      const savedItems = localStorage.getItem(`gallery-${activeTab}`)
+      if (savedItems) {
+        setGalleryItems(JSON.parse(savedItems))
+      } else {
+        // Default items if nothing saved
+        setGalleryItems([
+          {
+            id: "1",
+            type: "image",
+            src: "/placeholder.svg?height=600&width=800",
+            alt: "Sample image 1",
+            layout: { colSpan: "md:col-span-2", rowSpan: "md:row-span-1", aspectRatio: "aspect-[16/10]" },
+          },
+          {
+            id: "2",
+            type: "image",
+            src: "/placeholder.svg?height=400&width=400",
+            alt: "Sample image 2",
+            layout: { colSpan: "md:col-span-1", rowSpan: "md:row-span-1", aspectRatio: "aspect-square" },
+          },
+        ])
+      }
     } catch (error) {
-      console.error("Error fetching gallery items:", error)
+      console.error("Error loading gallery items:", error)
+      setGalleryItems([])
     }
   }
 
+  // Save gallery items to localStorage
+  const saveGalleryItems = () => {
+    try {
+      localStorage.setItem(`gallery-${activeTab}`, JSON.stringify(galleryItems))
+      return true
+    } catch (error) {
+      console.error("Error saving gallery items:", error)
+      return false
+    }
+  }
+
+  // Handle tab change
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadGalleryItems()
+    }
+  }, [activeTab, isAuthenticated])
+
   // Handle login
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
     setLoginError("")
 
     try {
-      // Simple demo authentication - replace with real auth in production
+      // Simple demo authentication
       if (email === "admin@psastudios.com" && password === "admin123") {
         localStorage.setItem("psaAdminToken", "demo-token")
         setIsAuthenticated(true)
-        await fetchGalleryItems()
+        loadGalleryItems()
       } else {
         setLoginError("Invalid email or password")
       }
@@ -147,52 +164,85 @@ export default function AdminPage() {
   }
 
   // Handle file upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
     setUploadingImage(true)
+    setStatusMessage("Processing images...")
 
     try {
-      // Simulate upload delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
       // Create new gallery items from the uploaded files
-      const newItems: GalleryItem[] = Array.from(files).map((file, index) => ({
-        id: `new-${Date.now()}-${index}`,
-        type: file.type.startsWith("video/") ? "video" : "image",
-        src: URL.createObjectURL(file),
-        alt: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
-        poster: file.type.startsWith("video/") ? "/placeholder.svg?height=500&width=800" : undefined,
-        layout: {
-          colSpan: "md:col-span-1",
-          rowSpan: "md:row-span-1",
-          aspectRatio: file.type.startsWith("video/") ? "aspect-video" : "aspect-[4/3]",
-        },
-      }))
+      const fileArray = Array.from(files)
+      const newItems: GalleryItem[] = []
 
-      setGalleryItems([...galleryItems, ...newItems])
+      // Process each file
+      fileArray.forEach((file, index) => {
+        const reader = new FileReader()
+
+        reader.onload = (e) => {
+          if (e.target?.result) {
+            const newItem: GalleryItem = {
+              id: `new-${Date.now()}-${index}`,
+              type: file.type.startsWith("video/") ? "video" : "image",
+              src: e.target.result as string, // Base64 data URL
+              alt: file.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+              poster: file.type.startsWith("video/") ? "/placeholder.svg?height=500&width=800" : undefined,
+              layout: {
+                colSpan: "md:col-span-1",
+                rowSpan: "md:row-span-1",
+                aspectRatio: file.type.startsWith("video/") ? "aspect-video" : "aspect-[4/3]",
+              },
+            }
+
+            newItems.push(newItem)
+
+            // When all files are processed, update state
+            if (newItems.length === fileArray.length) {
+              setGalleryItems((prev) => [...prev, ...newItems])
+              setUploadingImage(false)
+              setStatusMessage("Images uploaded successfully!")
+
+              // Clear message after 3 seconds
+              setTimeout(() => setStatusMessage(""), 3000)
+            }
+          }
+        }
+
+        reader.readAsDataURL(file)
+      })
     } catch (error) {
       console.error("Upload error:", error)
-      alert("Failed to upload files. Please try again.")
-    } finally {
+      setStatusMessage("Failed to upload files. Please try again.")
       setUploadingImage(false)
+
+      // Clear error message after 3 seconds
+      setTimeout(() => setStatusMessage(""), 3000)
     }
   }
 
   // Handle saving changes
-  const handleSaveChanges = async () => {
+  const handleSaveChanges = () => {
     setSavingChanges(true)
+    setStatusMessage("Saving changes...")
 
     try {
-      // Simulate save delay
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      alert("Changes saved successfully!")
+      // Save to localStorage
+      const success = saveGalleryItems()
+
+      if (success) {
+        setStatusMessage("Changes saved successfully!")
+      } else {
+        setStatusMessage("Failed to save changes. Please try again.")
+      }
     } catch (error) {
       console.error("Save error:", error)
-      alert("Failed to save changes. Please try again.")
+      setStatusMessage("Failed to save changes. Please try again.")
     } finally {
       setSavingChanges(false)
+
+      // Clear message after 3 seconds
+      setTimeout(() => setStatusMessage(""), 3000)
     }
   }
 
@@ -214,6 +264,10 @@ export default function AdminPage() {
   const deleteItem = (id: string) => {
     if (confirm("Are you sure you want to delete this item?")) {
       setGalleryItems(galleryItems.filter((item) => item.id !== id))
+      setStatusMessage("Item deleted")
+
+      // Clear message after 3 seconds
+      setTimeout(() => setStatusMessage(""), 3000)
     }
   }
 
@@ -333,6 +387,13 @@ export default function AdminPage() {
         </div>
       </header>
 
+      {/* Status message */}
+      {statusMessage && (
+        <div className="fixed top-20 right-4 z-50 bg-gray-800 text-white px-4 py-2 rounded-md shadow-lg">
+          {statusMessage}
+        </div>
+      )}
+
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Page tabs */}
@@ -397,13 +458,13 @@ export default function AdminPage() {
                     <div className="w-full lg:w-1/3">
                       <div className={`relative ${item.layout.aspectRatio} bg-gray-900 rounded-md overflow-hidden`}>
                         {item.type === "image" ? (
-                          <Image
-                            src={item.src || "/placeholder.svg?height=300&width=400"}
-                            alt={item.alt}
-                            fill
-                            className="object-cover"
-                            unoptimized
-                          />
+                          <div className="w-full h-full">
+                            <img
+                              src={item.src || "/placeholder.svg"}
+                              alt={item.alt}
+                              className="object-cover w-full h-full"
+                            />
+                          </div>
                         ) : (
                           <div className="flex items-center justify-center h-full">
                             <Film className="w-12 h-12 text-gray-600" />
@@ -509,13 +570,7 @@ export default function AdminPage() {
                 >
                   <div className={`relative ${item.layout.aspectRatio} bg-gray-900 rounded-md overflow-hidden`}>
                     {item.type === "image" ? (
-                      <Image
-                        src={item.src || "/placeholder.svg?height=300&width=400"}
-                        alt={item.alt}
-                        fill
-                        className="object-cover"
-                        unoptimized
-                      />
+                      <img src={item.src || "/placeholder.svg"} alt={item.alt} className="object-cover w-full h-full" />
                     ) : (
                       <div className="flex items-center justify-center h-full">
                         <Film className="w-12 h-12 text-gray-600" />
