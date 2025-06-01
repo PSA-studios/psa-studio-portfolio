@@ -1,26 +1,42 @@
-export const sendToWhatsApp = (message: string) => {
-  const phoneNumber = "9243333284"
+export const sendWhatsAppMessage = (message: string) => {
+  const phoneNumber = "919243333284" // Changed from "9243333284" to include country code
   const encodedMessage = encodeURIComponent(message)
   const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`
   window.open(whatsappUrl, "_blank")
 }
 
-export const sendFormToWhatsApp = (formData: Record<string, string>) => {
-  const phoneNumber = "9243333284"
+export const sendInquiry = () => {
+  const message =
+    "Hi! I'm interested in your cinematography services. Could you please provide more information about your packages and pricing?"
+  sendWhatsAppMessage(message)
+}
 
-  // Format the message with all form fields
-  let message = "New Form Submission:\n\n"
+export const sendQuote = (service: string) => {
+  const message = `Hi! I'd like to get a custom quote for ${service}. Please let me know your availability and pricing.`
+  sendWhatsAppMessage(message)
+}
 
-  for (const [key, value] of Object.entries(formData)) {
-    // Format the key with proper capitalization and spacing
-    const formattedKey = key
-      .replace(/([A-Z])/g, " $1") // Add space before capital letters
-      .replace(/^./, (str) => str.toUpperCase()) // Capitalize first letter
+export const sendContactMessage = () => {
+  const message = "Hi! I'd like to discuss a potential project with PSA Studios. When would be a good time to talk?"
+  sendWhatsAppMessage(message)
+}
 
-    message += `${formattedKey}: ${value}\n`
-  }
+export const sendFormData = (formData: {
+  name: string
+  email: string
+  company?: string
+  services: string[]
+  projectDetails: string
+}) => {
+  const message = `New Project Inquiry:
 
-  const encodedMessage = encodeURIComponent(message)
-  const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodedMessage}`
-  window.open(whatsappUrl, "_blank")
+Name: ${formData.name}
+Email: ${formData.email}
+${formData.company ? `Company: ${formData.company}` : ""}
+Services: ${formData.services.join(", ")}
+
+Project Details:
+${formData.projectDetails}`
+
+  sendWhatsAppMessage(message)
 }
